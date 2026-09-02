@@ -5,10 +5,10 @@ A multi-threaded, real-time command-line network traffic analyzer and security t
 - **Live Packet Ingestion**: Asynchronous packet sniffing powered by `Scapy` with multi-protocol parsing (`TCP`, `UDP`, `ICMP`).
 - **Real-time Telemetry Dashboard:** High-frequency UI rendering (4 FPS) showing packet throughput velocity, average packet size, and protocol mix ratios.
 - **Top Network Generators:** Dynamic host analytics tracking top talkers by packet count and volume with visual volume bar graphs.
-- **Threat Detection Watchlist:** Flags non-standard or high dynamic port connections (>1024) in real time for traffic anomaly detection.
-- **Built-in Privacy Masking:** Automatically obfuscates terminal display IP addresses (`X.X.xxx.xxx`) during public broadcasts, recordings, and demos without altering underlying forensic log integrity.
+- **Threat Detection Watchlist:** Flags TCP SYN probes, cleartext HTTP/FTP/Telnet traffic, and non-standard high dynamic port connections (>1024) in real time for traffic anomaly detection.
+- **Built-in Privacy Masking:** Press `m` inside the dashboard to toggle display-only IP masking — the network prefix stays visible while the host portion is blurred (e.g. `192.168.xxx.xxx`), so you can demo or record the dashboard publicly without exposing exact host addresses. This only affects what's drawn on screen; the underlying CSV/PCAP exports always retain full, unmasked addresses for forensic integrity.
 - **Thread-Safe Architecture:** Uses explicit thread locking (`threading.Lock`) to prevent race conditions between background sniffing, calculation workers, and UI rendering loops.
-- **Forensic Export Capability:** Non-blocking session capture logging with automated CSV exports for digital forensics and historical auditing.
+- **Forensic Export Capability:** Non-blocking session capture logging with automated export to both a structured `.csv` audit log and a `.pcap` file for deep-dive inspection in Wireshark.
 - Designed for low-level packet analysis, network velocity monitoring, host bandwidth tracking, and basic security threat inspection through an interactive Terminal User Interface (TUI).
 
 ---
@@ -21,11 +21,12 @@ A multi-threaded, real-time command-line network traffic analyzer and security t
 
 - **Python 3.8+** installed on your system.
 - Elevated privileges (`sudo` on Linux/macOS or **Administrator** on Windows) are strictly required for raw socket binding
+- Dependencies: `scapy`, `rich` (see `requirements.txt`)
 
 ## 📁 Project Layout
- 
+
 The tool is split into focused modules rather than one large script:
- 
+
 ```
 network_analyzer/
 ├── main.py         # Entry point: banner, thread startup, Live loop, save-on-exit prompt
@@ -72,47 +73,53 @@ python main.py
 5. Interactive Controls
 - **Target IP Filtering:** At launch, enter a target IP address to isolate specific traffic, or press Enter to analyze all interface traffic.
 
+- **Toggle Privacy Masking:** Press `m` inside the live dashboard to blur displayed IP host octets on/off. This is display-only — exported logs are never masked.
+
 - **Graceful Exit:** Press `q` inside the live dashboard to stop capturing cleanly and restore terminal states.
 
-- **Export Log:** Upon exit, choose `y` to sanitize and save the session capture to a structured `.csv` file.
+- **Export Log:** Upon exit, choose `y` to save the full, unmasked session capture to a structured `.csv` file and a `.pcap` file.
 
 ## 🔬 Architecture Overview
 
-The tool uses a non-blocking multi-threaded model to ensure high-speed network I/O never freezes the UI rendering pipeline:
+The tool uses a non-blocking multi-threaded model to ensure high-speed network I/O never freezes the UI rendering pipeline. Every thread that touches shared state (`state.py`) does so behind a single `threading.Lock`:
 
 ```
-                        ┌───────────────────────────────┐
-                        │   Scapy Packet Sniffer Thread │
-                        └───────────────┬───────────────┘
-                                        │ (Packet Callback)
+                        ┌─────────────────────────────┐
+                        │  Scapy Packet Sniffer Thread │
+                        └───────────────┬─────────────┘
+                                        │ (packet callback: capture.py)
                                         ▼
-┌──────────────────┐    ┌───────────────────────────────┐
-│ Thread Lock      │◄───┤ Thread-Safe Packet Buffers    │
-│ (threading.Lock) │    └───────────────┬───────────────┘
-└──────────────────┘                    │
-                                        ▼
-                        ┌───────────────────────────────┐
-                        │   Rich Terminal UI Layout     │
-                        │   (Live Engine @ 4 FPS)       │
-                        └───────────────────────────────┘
+                        ┌─────────────────────────────┐
+   ┌───────────────┐    │   Thread-Safe Shared State  │    ┌───────────────────────┐
+   │ Rate Calc      │──►│   (state.py, state.lock)     │◄──│ Mini-NIDS Detection   │
+   │ Thread (1 Hz)  │    └───────┬───────────────┬─────┘    │  Rules (detection.py) │
+   └───────────────┘            │               │          └───────────────────────┘
+                                 ▼               ▼
+                  ┌───────────────────────┐   ┌───────────────────────────┐
+                  │  Rich Terminal UI     │   │  On exit: CSV + PCAP      │
+                  │  (ui.py, 4 FPS,       │   │  Export (export.py)       │
+                  │  privacy.py masking)  │   │  — always unmasked        │
+                  └───────────────────────┘   └───────────────────────────┘
 ```
 
 
 ## 🧠 Known Limitations & Future Scope
 As a lightweight diagnostic tool, this script is optimized for immediate, short-term troubleshooting sessions (5–15 minutes).
 
-- Memory Optimization: Currently, all packets are buffered in RAM to enable complete end-of-session CSV exports. For extended capture sessions exceeding 100,000+ packets, future iterations will implement streaming buffers to log directly to disk.
-
-- PCAP Generation: Future updates will support raw .pcap export capabilities for deep-dive inspection in Wireshark.
+- **Memory Optimization:** Currently, all packets are buffered in RAM to enable complete end-of-session CSV/PCAP exports. For extended capture sessions exceeding 100,000+ packets, future iterations will implement streaming buffers to log directly to disk.
+- **IPv6 masking:** The privacy-masking feature currently only recognizes dotted-quad IPv4 addresses; IPv6 addresses are displayed unmasked.
+- **Cross-session dedupe:** Repeated identical alerts within the same session are suppressed, but the watchlist doesn't persist across runs.
 
 ## 📄 Output Format (CSV Audit Log)
-Exported `.csv` logs capture accurate, unmasked packet metadata for forensics:
+Exported `.csv` logs capture accurate, unmasked packet metadata for forensics (regardless of whether privacy masking was toggled on in the live UI):
 ```
 | Date       | Time     | Source IP    | Destination IP | Protocol | Service             | Size (Bytes) |
 | :---       | :---     | :---         | :---           | :---     | :---                | :---         |
 | 2026-08-05 | 18:45:01 | 192.168.1.15 | 142.250.190.46 | TCP      | HTTPS (Web)         | 54 B         |
 | 2026-08-05 | 18:45:02 | 192.168.1.1  | 192.168.1.15   | UDP      | DNS (Domain Lookup) | 78 B         |
 ```
+
+A matching `.pcap` file is written alongside the CSV, containing the raw captured packets for direct import into Wireshark.
 
 
 # 🌐 Networking Commands Lab
@@ -484,7 +491,7 @@ sudo tcpdump -i any -n
 ## 📚 Protocol Quick Reference
 
 | Protocol    | Purpose                         | Common Port |
-| ----------- | ------------------------------- | ----------: |
+| ----------- | -------------------------------- | ----------: |
 | ICMP / Ping | Connectivity testing            |         N/A |
 | FTP         | File transfer                   |      TCP 21 |
 | DNS         | Domain name resolution          |  UDP/TCP 53 |
