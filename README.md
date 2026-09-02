@@ -22,6 +22,24 @@ A multi-threaded, real-time command-line network traffic analyzer and security t
 - **Python 3.8+** installed on your system.
 - Elevated privileges (`sudo` on Linux/macOS or **Administrator** on Windows) are strictly required for raw socket binding
 
+## 📁 Project Layout
+ 
+The tool is split into focused modules rather than one large script:
+ 
+```
+network_analyzer/
+├── main.py         # Entry point: banner, thread startup, Live loop, save-on-exit prompt
+├── config.py        # Static constants (known services, buffer limits)
+├── state.py         # Shared mutable state + the thread lock
+├── privileges.py     # Root/administrator privilege check
+├── capture.py        # Scapy sniff callback, service resolution, capture + rate threads
+├── detection.py      # Mini-NIDS alert rules
+├── privacy.py         # Display-only IP masking helper
+├── export.py          # CSV + PCAP session export
+├── ui.py                # Rich dashboard layout + keyboard polling
+└── requirements.txt
+```
+
 ## 🚀 How to Run
 1. **Clone or download this repository to your local machine:**
 ```
