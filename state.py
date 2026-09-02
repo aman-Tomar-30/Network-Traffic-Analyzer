@@ -42,3 +42,6 @@ flagged_traffic = []
 # Concurrency + capture filter
 lock = threading.Lock()
 TARGET_IP = ""
+
+# Display-only privacy masking toggle (does not affect CSV/PCAP exports)
+mask_ips = False

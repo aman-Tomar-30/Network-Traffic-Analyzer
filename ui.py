@@ -11,6 +11,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 import state
+from privacy import maybe_mask
 
 
 def check_keyboard_input():
@@ -66,7 +67,9 @@ def generate_layout(console: Console) -> Layout:
 
         visible_packets = state.packet_buffer[-top_max_rows:]
         for pkt in visible_packets:
-            top_table.add_row(pkt[0], pkt[1], pkt[2], pkt[3], pkt[4], pkt[5], pkt[6])
+            src_display = maybe_mask(pkt[2], state.mask_ips)
+            dst_display = maybe_mask(pkt[3], state.mask_ips)
+            top_table.add_row(pkt[0], pkt[1], src_display, dst_display, pkt[4], pkt[5], pkt[6])
 
         top_panel = Panel(
             top_table,
@@ -99,7 +102,8 @@ def generate_layout(console: Console) -> Layout:
             filled = int((b_count / max_bytes) * bar_length)
             bar = "█" * filled + "░" * (bar_length - filled)
 
-            talkers_table.add_row(ip, str(p_count), data_str, f"[{bar}]")
+            ip_display = maybe_mask(ip, state.mask_ips)
+            talkers_table.add_row(ip_display, str(p_count), data_str, f"[{bar}]")
 
         talkers_panel = Panel(
             talkers_table, title="Top Network Generators", border_style="green"
@@ -164,10 +168,12 @@ def generate_layout(console: Console) -> Layout:
         footer_grid = Table.grid(expand=True)
         footer_grid.add_column(justify="left")
         footer_grid.add_column(justify="right")
+        mask_status = "ON" if state.mask_ips else "OFF"
         footer_grid.add_row(
-            "[bold green]Press [bold bright_green]'q'[/bold bright_green] to stop"
-            " capture and exit system[/bold green]",
-            "[dim green]All rights reserved to Yannich Thay[/dim green]",
+            "[bold green]Press [bold bright_green]'q'[/bold bright_green] to stop capture"
+            " | [bold bright_green]'m'[/bold bright_green] to toggle IP privacy masking"
+            f" ({mask_status})[/bold green]",
+            "[dim green]All rights reserved to Aman Tomar[/dim green]",
         )
         layout["footer"].update(Panel(footer_grid, border_style="green"))
 

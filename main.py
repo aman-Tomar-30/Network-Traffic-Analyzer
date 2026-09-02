@@ -66,6 +66,9 @@ def run_dashboard(console):
                 key = check_keyboard_input()
                 if key == "q":
                     break
+                elif key == "m":
+                    with state.lock:
+                        state.mask_ips = not state.mask_ips
                 live.update(generate_layout(console))
     except KeyboardInterrupt:
         pass
