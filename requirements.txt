@@ -1,2 +1,6 @@
 scapy>=2.5.0
 rich>=13.0.0
+pandas
+streamlit
+google-genai
+numpy
